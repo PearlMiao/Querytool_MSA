@@ -103,13 +103,13 @@ def load_data(csv_name: str) -> pd.DataFrame:
 
 
 def is_match(text: str, q: str, mode: str) -> bool:
-    """两种匹配：完全匹配 / 模糊匹配（都忽略大小写）"""
+    """两种匹配：精确匹配 / 模糊匹配（都忽略大小写）"""
     if not q:
         return False
     t = normalize(text)
     qn = normalize(q)
 
-    if mode == "完全匹配":
+    if mode == "精确匹配":
         return t == qn
     if mode == "模糊匹配":
         return qn in t
@@ -205,10 +205,10 @@ with col_btn:
     clicked_query = st.button("🔍 开始查询", use_container_width=True)
     clicked_clear = st.button("🧹 全部清空", use_container_width=True)
 
-# ✅ 两种匹配方式：完全匹配 / 模糊匹配
+# ✅ 两种匹配方式：精确匹配 / 模糊匹配
 mode = st.selectbox(
     "匹配方式",
-    ["完全匹配", "模糊匹配"],
+    ["精确匹配", "模糊匹配"],
     index=0,
     key="match_mode",
 )
@@ -254,4 +254,5 @@ else:
         file_name="matched_domains.csv",
         mime="text/csv",
     )
+
 
