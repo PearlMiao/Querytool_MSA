@@ -1,3 +1,4 @@
+
 import re
 import json
 from pathlib import Path
@@ -5,7 +6,6 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
-
 
 # ----------------------------
 # Page config
@@ -77,7 +77,8 @@ def is_match(text: str, q: str, mode: str) -> bool:
     return qn in t
 
 
-def parse_queries(raw: str) -> list"""
+def parse_queries(raw: str) -> list[str]:
+    """
     多 domain 输入：每行一个。
     兼容：同一行里用逗号/分号分隔也会拆开。
     自动清洗：去掉 http(s)://、www.、路径参数等，只保留域名。
@@ -98,7 +99,7 @@ def parse_queries(raw: str) -> list"""
 
     # 去重但保持顺序
     seen = set()
-    uniq = []
+    uniq: list[str] = []
     for x in items:
         key = normalize(x)
         if key not in seen:
@@ -233,11 +234,9 @@ components.html(
       btn.addEventListener('click', async () => {{
         try {{
           await navigator.clipboard.writeText(text);
-          // 成功提示可以保留（你没禁止成功提示）；若你也不想显示成功提示，可把下面两行删掉
           msg.textContent = "✅ 已复制";
           setTimeout(() => {{ msg.textContent = ""; }}, 1200);
         }} catch (e) {{
-          // 失败静默：不展示任何失败原因（按你的要求）
           msg.textContent = "";
         }}
       }});
@@ -245,4 +244,3 @@ components.html(
     """,
     height=60,
 )
-
