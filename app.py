@@ -192,7 +192,6 @@ if "last_filtered" not in st.session_state:
 col_inp, col_btn = st.columns([6, 1], gap="small")
 
 with col_inp:
-    # ✅ 用 key 让输入在切换匹配方式/重跑时不丢
     st.text_area(
         "输入 domain（支持批量查询，每行一个）",
         placeholder="例如：\nabc.com\nshop.cn",
@@ -203,7 +202,6 @@ with col_inp:
 with col_btn:
     st.write("")
     clicked_query = st.button("🔍 开始查询", use_container_width=True)
-    clicked_clear = st.button("🧹 全部清空", use_container_width=True)
 
 # ✅ 两种匹配方式：精确匹配 / 模糊匹配
 mode = st.selectbox(
@@ -212,11 +210,6 @@ mode = st.selectbox(
     index=0,
     key="match_mode",
 )
-
-# 清空：清输入 + 清结果
-if clicked_clear:
-    st.session_state["domain_input"] = ""
-    st.session_state["last_filtered"] = pd.DataFrame(columns=["domain"])
 
 # 只有点击开始查询才计算（切换模式/输入不会自动查）
 if clicked_query:
@@ -254,5 +247,3 @@ else:
         file_name="matched_domains.csv",
         mime="text/csv",
     )
-
-
