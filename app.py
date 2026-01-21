@@ -194,7 +194,7 @@ col_inp, col_btn = st.columns([6, 1], gap="small")
 with col_inp:
     # ✅ 用 key 让输入在切换匹配方式/重跑时不丢
     st.text_area(
-        "输入 domain（支持换行批量，每行一个）",
+        "输入 domain（支持批量查询，每行一个）",
         placeholder="例如：\nabc.com\nshop.cn",
         height=130,
         key="domain_input",
@@ -254,3 +254,4 @@ else:
         file_name="matched_domains.csv",
         mime="text/csv",
     )
+
