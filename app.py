@@ -15,6 +15,17 @@ st.set_page_config(
     layout="wide",
 )
 
+# ✅ 新增：隐藏 “Press Ctrl+Enter to apply”
+st.markdown(
+    """
+    <style>
+    /* Hide the "Press Ctrl+Enter to apply" / input instructions text */
+    [data-testid="InputInstructions"] { display: none !important; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 DATA_FILE = "cleaned_text.csv"
 MAX_INPUT = 1000  # 只允许提示这一条：建议一次输入不超过 1000 个 domain
 
@@ -251,4 +262,3 @@ else:
         file_name="matched_domains.csv",
         mime="text/csv",
     )
-
