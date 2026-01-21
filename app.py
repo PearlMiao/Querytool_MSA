@@ -163,7 +163,7 @@ col_inp, col_btn = st.columns([6, 1], gap="small")
 with col_inp:
     domain_raw = st.text_area(
         "输入 domain（支持换行批量，每行一个）",
-        placeholder="例如：\nhttps://www.example.com/path?a=1\nabc.com\nshop.cn",
+        placeholder="例如：\nabc.com\nshop.cn",
         height=130,
         value=st.session_state["domain_input"],
     )
@@ -175,7 +175,7 @@ with col_btn:
         st.session_state["run_query"] = True
         st.rerun()
 
-    if st.button("🧹 清空输入", use_container_width=True):
+    if st.button("🧹 全部清空", use_container_width=True):
         st.session_state["domain_input"] = ""
         st.session_state["run_query"] = False
         st.rerun()
@@ -251,3 +251,4 @@ else:
         file_name="matched_domains.csv",
         mime="text/csv",
     )
+
