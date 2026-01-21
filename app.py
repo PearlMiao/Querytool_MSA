@@ -1,11 +1,9 @@
 
 import re
-import json
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 
 
 # ----------------------------
@@ -26,7 +24,7 @@ MAX_INPUT = 1000  # 只允许提示这一条：建议一次输入不超过 1000 
 # ----------------------------
 def resolve_data_file(preferred_name: str) -> str:
     """
-    兜底处理文件名大小写问题：
+    兜底处理文件名大小写问题（适配 Linux/Streamlit Cloud）：
     - 优先用 preferred_name
     - 如果不存在，尝试同名但 .CSV / .csv 大小写变体
     - 仍不存在则返回 preferred_name（后续 load_data 会返回空DF并静默）
@@ -50,28 +48,6 @@ def resolve_data_file(preferred_name: str) -> str:
     return preferred_name
 
 
-@st.cache_data(show_spinner=False)
-def load_data(csv_name: str) -> pd.DataFrame:
-    """读取单列 domain CSV。若不存在/读取失败：返回空DF（不向用户展示任何技术提示）"""
-    csv_name = resolve_data_file(csv_name)
-    p = Path(csv_name)
-    if not p.exists():
-        return pd.DataFrame(columns=["domain"])
-
-    try:
-        df = pd.read_csv(p, header=None, names=["domain"], dtype=str, encoding="utf-8")
-    except Exception:
-        try:
-            df = pd.read_csv(p, header=None, names=["domain"], dtype=str, encoding="utf-8-sig")
-        except Exception:
-            return pd.DataFrame(columns=["domain"])
-
-    df["domain"] = df["domain"].fillna("").astype(str).str.strip()
-    df = df[df["domain"] != ""]
-    df = df.drop_duplicates().reset_index(drop=True)
-    return df
-
-
 def normalize(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip().lower())
 
@@ -93,9 +69,38 @@ def clean_domain_token(token: str) -> str:
     return t
 
 
+@st.cache_data(show_spinner=False)
+def load_data(csv_name: str) -> pd.DataFrame:
+    """读取单列 domain CSV。若不存在/读取失败：返回空DF（不向用户展示任何技术提示）"""
+    csv_name = resolve_data_file(csv_name)
+    p = Path(csv_name)
+    if not p.exists():
+        return pd.DataFrame(columns=["domain"])
+
+    try:
+        df = pd.read_csv(p, header=None, names=["domain"], dtype=str, encoding="utf-8")
+    except Exception:
+        try:
+            df = pd.read_csv(p, header=None, names=["domain"], dtype=str, encoding="utf-8-sig")
+        except Exception:
+            return pd.DataFrame(columns=["domain"])
+
+    # 标准化数据库里的 domain：去空、去重、并清洗为纯域名（与输入规则一致）
+    df["domain"] = (
+        df["domain"]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .apply(clean_domain_token)
+    )
+    df = df[df["domain"] != ""]
+    df = df.drop_duplicates().reset_index(drop=True)
+    return df
+
+
 def is_match(text: str, q: str, mode: str) -> bool:
     if not q:
-        return True
+        return False  # 关键：空 query 不应匹配任何行（避免“一查出来全表”）
     t = normalize(text)
     qn = normalize(q)
     if mode == "包含 (contains)":
@@ -146,44 +151,38 @@ df = load_data(DATA_FILE)
 
 st.subheader("查询")
 
-# 用 form 来避免 text_area 出现 “Ctrl+Enter 查询/应用” 的提示，
-# 并且只在点“开始查询”时才执行查询逻辑
+# 初始化状态
 if "domain_input" not in st.session_state:
     st.session_state["domain_input"] = ""
 if "run_query" not in st.session_state:
     st.session_state["run_query"] = False
 
+# 输入框 + 按钮（同一行）
 col_inp, col_btn = st.columns([6, 1], gap="small")
 
 with col_inp:
-    with st.form("query_form", clear_on_submit=False):
-        domain_raw = st.text_area(
-            "输入 domain（支持换行批量，每行一个）",
-            placeholder="例如：\nhttps://www.example.com/path?a=1\nabc.com\nshop.cn",
-            height=130,
-            value=st.session_state["domain_input"],
-        )
-        # 表单内放一个隐藏占位，按钮我们放到右侧列里更符合你的UI目标
-        submitted = st.form_submit_button("hidden_submit", disabled=True)
+    domain_raw = st.text_area(
+        "输入 domain（支持换行批量，每行一个）",
+        placeholder="例如：\nhttps://www.example.com/path?a=1\nabc.com\nshop.cn",
+        height=130,
+        value=st.session_state["domain_input"],
+    )
 
 with col_btn:
     st.write("")
-    # 开始查询
     if st.button("🔍 开始查询", use_container_width=True):
         st.session_state["domain_input"] = domain_raw
         st.session_state["run_query"] = True
         st.rerun()
 
-    # 清空输入
     if st.button("🧹 清空输入", use_container_width=True):
         st.session_state["domain_input"] = ""
         st.session_state["run_query"] = False
         st.rerun()
 
-# 匹配方式仍保留
 mode = st.selectbox(
     "匹配方式",
-    ["包含 (contains)", "完全匹配 (exact)"],
+    ["完全匹配 (exact)", "包含 (contains)"],
     index=0,
 )
 
@@ -206,14 +205,15 @@ else:
 # Filter（不对用户显示“CSV缺失/读取失败”等技术提示）
 # ----------------------------
 if df.empty:
-    filtered = df
+    filtered = df.iloc[0:0].copy()
 else:
-    # 如果没点开始查询，就不要默认展示全量
+    # 没点开始查询：不展示全量（避免误会）
     if not st.session_state["run_query"]:
         filtered = df.iloc[0:0].copy()
     else:
+        # 点了开始查询但解析后为空：返回 0 条（避免“一查出来全表”）
         if not queries:
-            filtered = df.copy()
+            filtered = df.iloc[0:0].copy()
         else:
             mask = df["domain"].apply(lambda x: any(is_match(x, q, mode) for q in queries))
             filtered = df[mask].copy()
@@ -251,44 +251,3 @@ else:
         file_name="matched_domains.csv",
         mime="text/csv",
     )
-
-# ----------------------------
-# Copy all（不提示失败，只提供功能 + 文本框兜底）
-# ----------------------------
-st.markdown("### 📋 一键复制全部结果")
-
-all_text = "\n".join(filtered["domain"].tolist()) if not filtered.empty else ""
-
-st.text_area(
-    "结果文本（每行一个 domain）",
-    value=all_text,
-    height=200,
-)
-
-components.html(
-    f"""
-    <div style="display:flex; gap:10px; align-items:center; margin-top:6px;">
-      <button id="copyBtn"
-              style="padding:8px 12px; border-radius:8px; border:1px solid #ddd; cursor:pointer;">
-        📋 一键复制全部
-      </button>
-      <span id="copyMsg" style="font-size:12px; color:#555;"></span>
-    </div>
-    <script>
-      const text = {json.dumps(all_text)};
-      const btn = document.getElementById('copyBtn');
-      const msg = document.getElementById('copyMsg');
-
-      btn.addEventListener('click', async () => {{
-        try {{
-          await navigator.clipboard.writeText(text);
-          msg.textContent = "✅ 已复制";
-          setTimeout(() => {{ msg.textContent = ""; }}, 1200);
-        }} catch (e) {{
-          msg.textContent = "";
-        }}
-      }});
-    </script>
-    """,
-    height=60,
-)
