@@ -7,6 +7,7 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
+
 # ----------------------------
 # Page config
 # ----------------------------
@@ -23,9 +24,36 @@ MAX_INPUT = 1000  # 只允许提示这一条：建议一次输入不超过 1000 
 # ----------------------------
 # Helpers
 # ----------------------------
+def resolve_data_file(preferred_name: str) -> str:
+    """
+    兜底处理文件名大小写问题：
+    - 优先用 preferred_name
+    - 如果不存在，尝试同名但 .CSV / .csv 大小写变体
+    - 仍不存在则返回 preferred_name（后续 load_data 会返回空DF并静默）
+    """
+    p = Path(preferred_name)
+    if p.exists():
+        return preferred_name
+
+    # 常见大小写变体兜底
+    alt_names = []
+    if preferred_name.lower().endswith(".csv"):
+        base = preferred_name[:-4]
+        alt_names = [base + ".CSV", base + ".Csv", base + ".cSv", base + ".csV"]
+    else:
+        alt_names = [preferred_name.lower(), preferred_name.upper()]
+
+    for name in alt_names:
+        if Path(name).exists():
+            return name
+
+    return preferred_name
+
+
 @st.cache_data(show_spinner=False)
 def load_data(csv_name: str) -> pd.DataFrame:
     """读取单列 domain CSV。若不存在/读取失败：返回空DF（不向用户展示任何技术提示）"""
+    csv_name = resolve_data_file(csv_name)
     p = Path(csv_name)
     if not p.exists():
         return pd.DataFrame(columns=["domain"])
@@ -118,26 +146,54 @@ df = load_data(DATA_FILE)
 
 st.subheader("查询")
 
-# 输入框 + 清空按钮（同一行）
+# 用 form 来避免 text_area 出现 “Ctrl+Enter 查询/应用” 的提示，
+# 并且只在点“开始查询”时才执行查询逻辑
+if "domain_input" not in st.session_state:
+    st.session_state["domain_input"] = ""
+if "run_query" not in st.session_state:
+    st.session_state["run_query"] = False
+
 col_inp, col_btn = st.columns([6, 1], gap="small")
 
 with col_inp:
-    st.text_area(
-        "输入 domain（支持换行批量，每行一个）",
-        placeholder="例如：\nhttps://www.example.com/path?a=1\nabc.com\nshop.cn",
-        height=130,
-        key="domain_input",
-    )
+    with st.form("query_form", clear_on_submit=False):
+        domain_raw = st.text_area(
+            "输入 domain（支持换行批量，每行一个）",
+            placeholder="例如：\nhttps://www.example.com/path?a=1\nabc.com\nshop.cn",
+            height=130,
+            value=st.session_state["domain_input"],
+        )
+        # 表单内放一个隐藏占位，按钮我们放到右侧列里更符合你的UI目标
+        submitted = st.form_submit_button("hidden_submit", disabled=True)
 
 with col_btn:
     st.write("")
-    st.write("")
-    if st.button("🧹 清空输入", use_container_width=True):
-        st.session_state["domain_input"] = ""
+    # 开始查询
+    if st.button("🔍 开始查询", use_container_width=True):
+        st.session_state["domain_input"] = domain_raw
+        st.session_state["run_query"] = True
         st.rerun()
 
-# 解析输入
-queries_all = parse_queries(st.session_state.get("domain_input", ""))
+    # 清空输入
+    if st.button("🧹 清空输入", use_container_width=True):
+        st.session_state["domain_input"] = ""
+        st.session_state["run_query"] = False
+        st.rerun()
+
+# 匹配方式仍保留
+mode = st.selectbox(
+    "匹配方式",
+    ["包含 (contains)", "完全匹配 (exact)"],
+    index=0,
+)
+
+# ----------------------------
+# 解析输入（仅在点击“开始查询”后）
+# ----------------------------
+if st.session_state["run_query"]:
+    queries_all = parse_queries(st.session_state.get("domain_input", ""))
+else:
+    queries_all = []
 
 # 输入上限提示（只允许出现这一条）
 if len(queries_all) > MAX_INPUT:
@@ -146,36 +202,28 @@ if len(queries_all) > MAX_INPUT:
 else:
     queries = queries_all
 
-mode = st.selectbox(
-    "匹配方式",
-    ["包含 (contains)", "完全匹配 (exact)"],
-    index=0,
-)
-
-sort_opt = st.selectbox(
-    "排序",
-    ["按字母升序", "按字母降序"],
-    index=0,
-)
-
 # ----------------------------
 # Filter（不对用户显示“CSV缺失/读取失败”等技术提示）
 # ----------------------------
 if df.empty:
     filtered = df
 else:
-    if not queries:
-        filtered = df.copy()
+    # 如果没点开始查询，就不要默认展示全量
+    if not st.session_state["run_query"]:
+        filtered = df.iloc[0:0].copy()
     else:
-        mask = df["domain"].apply(lambda x: any(is_match(x, q, mode) for q in queries))
-        filtered = df[mask].copy()
+        if not queries:
+            filtered = df.copy()
+        else:
+            mask = df["domain"].apply(lambda x: any(is_match(x, q, mode) for q in queries))
+            filtered = df[mask].copy()
 
 # ----------------------------
-# Sort
+# Sort（固定自动升序；已删除排序选项）
 # ----------------------------
 if not filtered.empty:
     filtered["__k"] = filtered["domain"].str.lower()
-    filtered = filtered.sort_values("__k", ascending=(sort_opt == "按字母升序")).drop(columns=["__k"])
+    filtered = filtered.sort_values("__k", ascending=True).drop(columns=["__k"])
 
 # ----------------------------
 # Results
