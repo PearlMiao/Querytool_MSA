@@ -37,7 +37,7 @@ def resolve_data_file(preferred_name: str) -> str:
     """
     兜底处理文件名大小写问题（适配 Linux/Streamlit Cloud）：
     - 优先用 preferred_name
-    - 如果不存在，尝试同名但 .CSV / .csv 大小写变体
+    - 若不存在，尝试同名但 .CSV / .csv 大小写变体
     """
     p = Path(preferred_name)
     if p.exists():
@@ -81,7 +81,6 @@ def load_data(csv_name: str) -> pd.DataFrame:
     if not p.exists():
         return pd.DataFrame(columns=["domain"])
 
-    # ✅ 这里是你报错最常见的区域：确保 except 下方有正确缩进的代码块
     try:
         df = pd.read_csv(p, header=None, names=["domain"], dtype=str, encoding="utf-8")
     except Exception:
@@ -104,6 +103,7 @@ def load_data(csv_name: str) -> pd.DataFrame:
 
 
 def is_match(text: str, q: str, mode: str) -> bool:
+    """两种匹配：完全匹配 / 前缀一致（都忽略大小写）"""
     if not q:
         return False
     t = normalize(text)
@@ -148,6 +148,32 @@ def parse_queries(raw: str) -> list[str]:
     return uniq
 
 
+def run_query(df: pd.DataFrame, raw_input: str, mode: str) -> pd.DataFrame:
+    """真正执行一次查询：解析输入 -> 过滤 -> 排序"""
+    if df.empty:
+        return df.iloc[0:0].copy()
+
+    queries_all = parse_queries(raw_input)
+
+    # 输入上限提示（只允许出现这一条）
+    if len(queries_all) > MAX_INPUT:
+        st.info(f"建议一次输入不超过 {MAX_INPUT} 个 domain")
+        queries = queries_all[:MAX_INPUT]
+    else:
+        queries = queries_all
+
+    if not queries:
+        return df.iloc[0:0].copy()
+
+    mask = df["domain"].apply(lambda x: any(is_match(x, q, mode) for q in queries))
+    filtered = df[mask].copy()
+
+    if not filtered.empty:
+        filtered["__k"] = filtered["domain"].str.lower()
+        filtered = filtered.sort_values("__k", ascending=True).drop(columns=["__k"])
+    return filtered
+
+
 # ----------------------------
 # UI
 # ----------------------------
@@ -158,15 +184,15 @@ df = load_data(DATA_FILE)
 
 st.subheader("查询")
 
-# 初始化状态
-if "run_query" not in st.session_state:
-    st.session_state["run_query"] = False
+# 初始化：保存上次结果（避免“没点按钮也自动查”）
+if "last_filtered" not in st.session_state:
+    st.session_state["last_filtered"] = pd.DataFrame(columns=["domain"])
 
 # 输入框 + 按钮（同一行）
 col_inp, col_btn = st.columns([6, 1], gap="small")
 
 with col_inp:
-    # ✅ 用 key 让输入内容在 rerun/切换匹配方式时保持不丢
+    # ✅ 用 key 让输入在切换匹配方式/重跑时不丢
     st.text_area(
         "输入 domain（支持换行批量，每行一个）",
         placeholder="例如：\nabc.com\nshop.cn",
@@ -176,16 +202,10 @@ with col_inp:
 
 with col_btn:
     st.write("")
-    if st.button("🔍 开始查询", use_container_width=True):
-        st.session_state["run_query"] = True
-        st.rerun()
+    clicked_query = st.button("🔍 开始查询", use_container_width=True)
+    clicked_clear = st.button("🧹 全部清空", use_container_width=True)
 
-    if st.button("🧹 全部清空", use_container_width=True):
-        st.session_state["domain_input"] = ""
-        st.session_state["run_query"] = False
-        st.rerun()
-
-# ✅ 两种匹配方式：完全匹配 / 前缀一致
+# ✅ 两种匹配方式
 mode = st.selectbox(
     "匹配方式",
     ["完全匹配", "前缀一致"],
@@ -193,42 +213,18 @@ mode = st.selectbox(
     key="match_mode",
 )
 
-# ----------------------------
-# 解析输入（仅在点击“开始查询”后）
-# ----------------------------
-if st.session_state["run_query"]:
-    queries_all = parse_queries(st.session_state.get("domain_input", ""))
-else:
-    queries_all = []
+# 清空：清输入 + 清结果
+if clicked_clear:
+    st.session_state["domain_input"] = ""
+    st.session_state["last_filtered"] = pd.DataFrame(columns=["domain"])
 
-# 输入上限提示（只允许出现这一条）
-if len(queries_all) > MAX_INPUT:
-    st.info(f"建议一次输入不超过 {MAX_INPUT} 个 domain")
-    queries = queries_all[:MAX_INPUT]
-else:
-    queries = queries_all
-
-# ----------------------------
-# Filter
-# ----------------------------
-if df.empty:
-    filtered = df.iloc[0:0].copy()
-else:
-    if not st.session_state["run_query"]:
-        filtered = df.iloc[0:0].copy()
-    else:
-        if not queries:
-            filtered = df.iloc[0:0].copy()
-        else:
-            mask = df["domain"].apply(lambda x: any(is_match(x, q, mode) for q in queries))
-            filtered = df[mask].copy()
-
-# ----------------------------
-# Sort（固定自动升序）
-# ----------------------------
-if not filtered.empty:
-    filtered["__k"] = filtered["domain"].str.lower()
-    filtered = filtered.sort_values("__k", ascending=True).drop(columns=["__k"])
+# 只有点击开始查询才计算（切换模式/输入不会自动查）
+if clicked_query:
+    st.session_state["last_filtered"] = run_query(
+        df=df,
+        raw_input=st.session_state.get("domain_input", ""),
+        mode=mode,
+    )
 
 # ----------------------------
 # Results
@@ -236,12 +232,21 @@ if not filtered.empty:
 st.markdown("---")
 st.subheader("查询结果")
 
+filtered = st.session_state["last_filtered"]
+
+# 只允许出现“未找到匹配的 Domain”
 if filtered.empty:
     st.write("未找到匹配的 Domain")
 else:
     st.write(f"共 **{len(filtered):,}** 条匹配结果")
-    st.dataframe(filtered, use_container_width=True, hide_index=True)
 
+    st.dataframe(
+        filtered,
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    # Download: one per line, no header
     csv_bytes = filtered["domain"].to_csv(index=False, header=False).encode("utf-8")
     st.download_button(
         label="⬇️ 下载匹配结果（CSV）",
