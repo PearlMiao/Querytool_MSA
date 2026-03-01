@@ -177,8 +177,8 @@ def run_query(df: pd.DataFrame, raw_input: str, mode: str) -> pd.DataFrame:
 # ----------------------------
 # UI
 # ----------------------------
-st.title("🔎 MSA Domain Query Tool")
-st.caption("数据：自2025/01/01至2025/12/31 在MSA有投放历史的Domain")
+st.title("🔎 MSA CBA Domain Query Tool")
+st.caption("数据：自2025/07至2026/01 代理侧有消耗的根域名")
 
 df = load_data(DATA_FILE)
 
@@ -247,3 +247,4 @@ else:
         file_name="matched_domains.csv",
         mime="text/csv",
     )
+
