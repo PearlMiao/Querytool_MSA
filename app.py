@@ -10,7 +10,7 @@ import streamlit as st
 # Page config
 # ----------------------------
 st.set_page_config(
-    page_title="MSA Domain Query Tool",
+    page_title="MSA CBA Domain Query Tool",
     page_icon="🔎",
     layout="wide",
 )
@@ -193,8 +193,8 @@ col_inp, col_btn = st.columns([6, 1], gap="small")
 
 with col_inp:
     st.text_area(
-        "输入 domain（支持批量查询，每行一个）",
-        placeholder="例如：\nabc.com\nshop.cn",
+        "输入根域名（支持批量查询，每行一个）",
+        placeholder="例如：\nabc\nshop",
         height=130,
         key="domain_input",
     )
@@ -247,4 +247,5 @@ else:
         file_name="matched_domains.csv",
         mime="text/csv",
     )
+
 
