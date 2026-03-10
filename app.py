@@ -14,7 +14,7 @@ st.set_page_config(
     layout="wide",
 )
 
-# 隐藏 “Press Ctrl + Enter...” 这类输入框提示（可选）
+# 隐藏“Press Ctrl + Enter...”这类输入框提示（可选）
 st.markdown(
     """
     <style>
@@ -39,7 +39,7 @@ COL_RES = "匹配结果"  # 结果列名（中文）
 # Helpers
 # =========================
 def resolve_data_file(preferred_name: str) -> str:
-    """处理文件名大小写问题，适配 Linux / Streamlit Cloud。"""
+    """处理文件名大小写问题，适配 Linux / Streamlit Cloud"""
     p = Path(preferred_name)
     if p.exists():
         return preferred_name
@@ -70,15 +70,15 @@ def normalize(s: str) -> str:
 @st.cache_data
 def load_data(csv_name: str) -> pd.DataFrame:
     """
-    读取 CSV（单列域名库） -> 中文列名 COL_DB
-    注意：按你的要求，这里不做“清洗”，只做 strip()、去空、去重。
+    读取 CSV（单列域名库），转成中文列名 COL_DB
+    不做清洗，仅 strip + 去重
+    SOP 中说明 cleaned_text.csv 通常为无表头单列文件。[1](https://microsoftapc-my.sharepoint.com/personal/mengyzhang_microsoft_com/_layouts/15/Doc.aspx?sourcedoc=%7B640F277C-852D-489A-A53B-6400EF78541D%7D&file=MSA%20Query%20Tool%20Webapp%20SOP.docx&action=default&mobileredirect=true&DefaultItemOpen=1)
     """
     csv_name = resolve_data_file(csv_name)
     p = Path(csv_name)
     if not p.exists():
         return pd.DataFrame(columns=[COL_DB])
 
-    # 尝试多种编码读取
     df = None
     for enc in ("utf-8-sig", "utf-8", "gb18030"):
         try:
@@ -90,9 +90,8 @@ def load_data(csv_name: str) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame(columns=[COL_DB])
 
-    # SOP 里导出的 cleaned_text.csv 通常是无表头单列，这里取第一列即可。[1](https://learn.microsoft.com/zh-cn/deployedge/microsoft-edge-browser-policies/browsersignin)
+    # 无表头单列：取第一列
     s = df.iloc[:, 0]
-
     df2 = pd.DataFrame({COL_DB: s.fillna("").astype(str).str.strip()})
     df2 = df2[df2[COL_DB] != ""].drop_duplicates().reset_index(drop=True)
     return df2
@@ -100,8 +99,8 @@ def load_data(csv_name: str) -> pd.DataFrame:
 
 def parse_queries(raw: str) -> list[str]:
     """
-    多输入：每行一个，或逗号/空格分隔
-    不做清洗：只 strip()，并去重保序
+    输入：每行一个，或逗号/空格分隔
+    不做清洗，仅 strip + 去重保序
     """
     if not raw:
         return []
@@ -129,11 +128,7 @@ def parse_queries(raw: str) -> list[str]:
 
 
 def build_result_table(df_db: pd.DataFrame, raw_input: str) -> pd.DataFrame:
-    """
-    仅精确匹配（已删除模糊匹配）：
-      根域名：用户输入（strip + 去重保序后）
-      匹配结果：域名已使用 / 域名未使用
-    """
+    """输出两列：根域名 / 匹配结果（仅精确匹配）"""
     queries_all = parse_queries(raw_input)
 
     if len(queries_all) > MAX_INPUT:
@@ -152,8 +147,7 @@ def build_result_table(df_db: pd.DataFrame, raw_input: str) -> pd.DataFrame:
 
     results = []
     for q in queries_all:
-        qn = normalize(q)
-        ok = qn in db_norm_set
+        ok = normalize(q) in db_norm_set
         results.append({COL_IN: q, COL_RES: "域名已使用" if ok else "域名未使用"})
 
     return pd.DataFrame(results)
@@ -163,7 +157,7 @@ def build_result_table(df_db: pd.DataFrame, raw_input: str) -> pd.DataFrame:
 # UI
 # =========================
 st.title("MSA CBA Domain Query Tool")
-st.caption("数据源：2025/07 至 2026/01 代理消耗域名库（cleaned_text.csv）")  # 数据来源描述来自你们现有工具背景/文档[1](https://learn.microsoft.com/zh-cn/deployedge/microsoft-edge-browser-policies/browsersignin)
+st.caption("数据源：25年7月-26年1月 CBA已使用根域名")
 
 df_db = load_data(DATA_FILE)
 
@@ -177,7 +171,7 @@ col_inp, col_btn = st.columns([6, 1], gap="small")
 with col_inp:
     raw_input = st.text_area(
         "输入根域名批量查询（每行一个，或逗号/空格分隔）",
-        placeholder="abc\nshop",  # ✅ 灰色提示只给 abc、shop
+        placeholder="abc\nshop",  # ✅ 灰色提示只给这两个
         height=130,
         key="domain_input",
     )
@@ -198,35 +192,17 @@ result_df = st.session_state["last_result"]
 if result_df.empty:
     st.write("暂无结果：请输入域名并点击“开始查询”。")
 else:
-    # 筛选：全部 / 已使用 / 未使用
-    col_f1, col_f2 = st.columns([2, 4], gap="small")
-    with col_f1:
-        filter_option = st.selectbox(
-            "筛选结果",
-            ["全部", "域名已使用", "域名未使用"],
-            index=0,
-            key="result_filter",
-        )
-    with col_f2:
-        keyword = st.text_input(
-            "关键词过滤（可选）",
-            value="",
-            placeholder="输入片段，例如：abc / shop",
-            key="result_keyword",
-        )
+    # 只保留：筛选结果（不再提供关键词过滤）
+    filter_option = st.selectbox(
+        "筛选结果",
+        ["全部", "域名已使用", "域名未使用"],
+        index=0,
+        key="result_filter",
+    )
 
     view_df = result_df.copy()
-
     if filter_option != "全部":
         view_df = view_df[view_df[COL_RES] == filter_option].copy()
-
-    if keyword.strip():
-        k = normalize(keyword)
-        mask = (
-            view_df[COL_IN].fillna("").astype(str).map(normalize).str.contains(k, regex=False)
-            | view_df[COL_RES].fillna("").astype(str).map(normalize).str.contains(k, regex=False)
-        )
-        view_df = view_df[mask].copy()
 
     st.write(f"显示 {len(view_df)} 条（原始结果 {len(result_df)} 条）")
     st.dataframe(view_df, use_container_width=True, hide_index=True)
