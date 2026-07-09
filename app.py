@@ -157,7 +157,7 @@ def build_result_table(df_db: pd.DataFrame, raw_input: str) -> pd.DataFrame:
 # UI
 # =========================
 st.title("MSA CBA Domain Query Tool")
-st.caption("数据源：25年11月-26年5月 CBA已使用根域名")
+st.caption("数据源：25年12月-26年6月 CBA已使用根域名")
 
 df_db = load_data(DATA_FILE)
 
