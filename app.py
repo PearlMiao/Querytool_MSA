@@ -183,7 +183,7 @@ def load_data(csv_name: str) -> pd.DataFrame:
     return df2
 
 
-def parse_queries(raw: str) -> list[str\]:
+def parse_queries(raw: str) -> list[str]:
     """
     输入支持：
     1. 每行一个
