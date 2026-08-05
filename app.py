@@ -291,7 +291,7 @@ def build_result_table(df_db: pd.DataFrame, raw_input: str) -> pd.DataFrame:
         if keyword not in keyword_map:
             keyword_map[keyword] = []
 
-        if d not in keyword_map[keyword\]:
+        if d not in keyword_map[keyword]:
             keyword_map[keyword].append(d)
 
     results = []
