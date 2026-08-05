@@ -363,7 +363,7 @@ col_inp, col_btn = st.columns([6, 1], gap="small")
 with col_inp:
     raw_input = st.text_area(
         "输入根域名批量查询（每行一个，或逗号/空格分隔）",
-        placeholder="abc\nshop",
+        placeholder="abc.com\nshop.cn",
         height=130,
         key="domain_input",
     )
